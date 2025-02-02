@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Email Header Parser (w/ Attitude)</title>
+  <style>
+    /* Fill the window, simple black background */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      font-family: "Consolas", "Courier New", monospace;
+    }
+
+    /*
+     We'll use a CSS variable (--pulseColor) for the text color, 
+     updated via JS to transition green→cyan→purple→green.
+    */
+    :root {
+      --pulseColor: #0f0; /* fallback if JS isn't running */
+    }
+
+    /* Container for all content */
+    .container {
+      max-width: 800px;
+      margin: 40px auto; /* center horizontally, with some top/bottom space */
+      background-color: rgba(0,0,0,0.5);
+      border: 1px solid var(--pulseColor);
+      box-shadow: 0 0 15px var(--pulseColor);
+      padding: 20px;
+    }
+
+    /* Heading */
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: var(--pulseColor);
+      text-shadow: 0 0 5px var(--pulseColor);
+      text-transform: uppercase;
+    }
+
+    /* Paragraph text, labels, etc. */
+    p, label {
+      color: var(--pulseColor);
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+
+    /* Textarea, button, and results share the same color scheme */
+    textarea, button, .results {
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--pulseColor);
+      background-color: #000;
+      border: 1px solid var(--pulseColor);
+    }
+
+    /* Textarea specifics */
+    #headerText {
+      width: 100%;
+      height: 200px;
+      box-sizing: border-box;
+      padding: 10px;
+      resize: vertical;
+    }
+
+    /* Button hover */
+    button:hover {
+      background-color: var(--pulseColor);
+      color: #000;
+      cursor: pointer;
+    }
+
+    /* Results box */
+    .results {
+      margin-top: 20px;
+      padding: 10px;
+      min-height: 150px;
+      white-space: pre;       /* preserve newlines/spaces */
+      box-shadow: inset 0 0 10px var(--pulseColor);
+      margin-bottom: 10px;
+    }
+
+    .insult {
+      margin-top: 10px;
+      color: var(--pulseColor);
+      font-style: italic;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Email Header Parser (w/ Attitude)</h1>
+    <!-- We'll replace this text with a random short insult on load -->
+    <p id="description"></p>
+
+    <label for="headerText">Email Header:</label>
+    <textarea id="headerText" placeholder="Paste your raw email header here..."></textarea><br>
+
+    <!-- Button text also replaced with random short insult on load -->
+    <button id="parseBtn">Placeholder</button>
+
+    <!-- The parsed output goes here -->
+    <div class="results" id="infoOutput">Results will appear here...</div>
+
+    <!-- Final insult after parsing -->
+    <div class="insult" id="insultOutput"></div>
+  </div>
+
+  <script>
+    /*****************************************************************************
+     * 1) COLOR PULSE: green → cyan → purple → green (6-second cycle)
+     *    We'll update --pulseColor every animation frame.
+     ****************************************************************************/
+    function getPulseColor() {
+      // 6-second total cycle
+      const period = 6000;
+      const t = performance.now() % period;
+      const fraction = t / period; // 0..1
+
+      // Three segments, each ~2 seconds
+      // Segment 1 (0..1/3): green(0,255,0) → cyan(0,255,255)
+      // Segment 2 (1/3..2/3): cyan(0,255,255) → purple(255,0,255)
+      // Segment 3 (2/3..1): purple(255,0,255) → green(0,255,0)
+
+      if (fraction < 1/3) {
+        const localT = fraction / (1/3);
+        const r = 0;
+        const g = 255;
+        const b = Math.round(255 * localT); // 0 → 255
+        return `rgb(${r},${g},${b})`;
+      } else if (fraction < 2/3) {
+        const localT = (fraction - 1/3) / (1/3);
+        const r = Math.round(255 * localT); // 0 → 255
+        const g = Math.round(255 - 255*localT); // 255 → 0
+        const b = 255;
+        return `rgb(${r},${g},${b})`;
+      } else {
+        const localT = (fraction - 2/3) / (1/3);
+        const r = Math.round(255 - 255*localT); // 255 → 0
+        const g = Math.round(255 * localT);     // 0 → 255
+        const b = Math.round(255 - 255*localT); // 255 → 0
+        return `rgb(${r},${g},${b})`;
+      }
+    }
+
+    function pulseLoop() {
+      requestAnimationFrame(pulseLoop);
+      document.documentElement.style.setProperty('--pulseColor', getPulseColor());
+    }
+    pulseLoop();
+
+    /*****************************************************************************
+     * 2) SNARKY INSULTS
+     ****************************************************************************/
+    // For the page's initial description
+    const descriptionInsults = [
+      "Paste your email header below, slowpoke, and let me do all the work.",
+      "You call that a header? Gimme something to parse already.",
+      "Paste that junk in here, n00b, so we can see how awful it is.",
+      "Hurry up! My CPU is bored.",
+      "Feed me your worthless email header, mortal."
+    ];
+
+    // For the button label
+    const buttonInsults = [
+      "Parse This Garbage",
+      "Smack That Header",
+      "Hit Me, Nerd",
+      "Bring It On, Rookie",
+      "Show Me Your Worst",
+      "Ouch, Daddy!"
+    ];
+
+    // After parse
+    const finalInsults = [
+      "Wow, I've seen better headers from a fax machine.",
+      "Yikes... even my grandma can parse headers better.",
+      "I can't believe I'm wasting CPU cycles on this.",
+      "404: Decent email header not found.",
+      "Next time, try sending something more interesting.",
+      "I’ve parsed better spam from my junk folder."
+    ];
+
+    function getRandomItem(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    // Immediately pick a random insult for description and button
+    document.getElementById("description").textContent = getRandomItem(descriptionInsults);
+    document.getElementById("parseBtn").textContent = getRandomItem(buttonInsults);
+
+    /*****************************************************************************
+     * 3) EMAIL HEADER PARSER
+     ****************************************************************************/
+    function parseField(headerText, regex) {
+      const match = headerText.match(regex);
+      return match ? match[1].trim() : "Not found";
+    }
+
+    function parseEmailHeader(headerText) {
+      // 1. Sender's Email
+      let senderEmail = headerText.match(/From:\s*(?:"[^"]*"\s*)?<([^>]+)>/i);
+      if (!senderEmail) {
+        senderEmail = headerText.match(/Return-Path:\s*<([^>]+)>/i);
+      }
+      senderEmail = senderEmail ? senderEmail[1] : "Not found";
+
+      // 2. Mail Server Name
+      const mailServerName = parseField(headerText, /Received:\s*from\s+([^\s]+)/i);
+
+      // 3. Mail Server IP
+      const mailServerIP = parseField(headerText, /\[([\d.]+)\]/);
+
+      // 4. Message-ID
+      const messageID = parseField(headerText, /Message-ID:\s*<([^>]+)>/i);
+
+      // 5. Reply-To
+      const replyTo = parseField(headerText, /Reply-To:\s*(?:"[^"]*"\s*)?<([^>]+)>/i);
+
+      // 6. Date
+      const dateHeader = parseField(headerText, /^Date:\s*(.+)$/im);
+
+      // 7. Subject
+      const subject = parseField(headerText, /^Subject:\s*(.+)$/im);
+
+      // 8. User-Agent or X-Mailer
+      const userAgent = parseField(headerText, /^(?:User-Agent|X-Mailer):\s*(.+)$/im);
+
+      // 9. X-Originating-IP / X-Sender-IP
+      let originatingIP = parseField(headerText, /^X-Originating-IP:\s*\[([\d.]+)\]/im);
+      if (originatingIP === "Not found") {
+        originatingIP = parseField(headerText, /^X-Sender-IP:\s*\[([\d.]+)\]/im);
+      }
+
+      // 10. X-Spam-Status or X-Spam-Score
+      let spamStatus = parseField(headerText, /^X-Spam-Status:\s*(.+)$/im);
+      if (spamStatus === "Not found") {
+        spamStatus = parseField(headerText, /^X-Spam-Score:\s*(.+)$/im);
+      }
+
+      // Log to console
+      console.log("----- Parsed Email Header Info -----");
+      console.log("Sender’s Email Address:  ", senderEmail);
+      console.log("Mail Server Name:        ", mailServerName);
+      console.log("Mail Server IP:          ", mailServerIP);
+      console.log("Message-ID:              ", messageID);
+      console.log("Reply-To:                ", replyTo);
+      console.log("Date:                    ", dateHeader);
+      console.log("Subject:                 ", subject);
+      console.log("User-Agent / X-Mailer:   ", userAgent);
+      console.log("Originating IP:          ", originatingIP);
+      console.log("Spam Status/Score:       ", spamStatus);
+      console.log("------------------------------------");
+
+      // Show results on the page
+      const output =
+`Sender’s Email Address:   ${senderEmail}
+Mail Server Name:         ${mailServerName}
+Mail Server IP:           ${mailServerIP}
+Message-ID:               ${messageID}
+Reply-To:                 ${replyTo}
+Date:                     ${dateHeader}
+Subject:                  ${subject}
+User-Agent / X-Mailer:    ${userAgent}
+Originating IP:           ${originatingIP}
+Spam Status/Score:        ${spamStatus}`;
+
+      document.getElementById("infoOutput").textContent = output;
+
+      // Final snark
+      document.getElementById("insultOutput").textContent = getRandomItem(finalInsults);
+    }
+
+    // On button click, parse or insult for empty input
+    document.getElementById("parseBtn").addEventListener("click", () => {
+      const headerText = document.getElementById("headerText").value.trim();
+      if (!headerText) {
+        document.getElementById("infoOutput").textContent = "No header provided!";
+        document.getElementById("insultOutput").textContent = "You can't parse nothing, genius.";
+        return;
+      }
+      parseEmailHeader(headerText);
+    });
+  </script>
+</body>
+</html>
